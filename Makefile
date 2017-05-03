@@ -13,4 +13,4 @@ testenv:
 package: version
 	python setup.py sdist
 
-.PHONY: package test clean testenv
+.PHONY: package test clean testenv version
