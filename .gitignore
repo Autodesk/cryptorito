@@ -1,0 +1,5 @@
+.ci-env
+cryptorito/version
+cryptorito.egg-info/
+*.pyc
+dist/

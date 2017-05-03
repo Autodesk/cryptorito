@@ -1,0 +1,8 @@
+pep8
+avakas
+nose2
+shyaml
+awscli
+pylint
+future
+bandit

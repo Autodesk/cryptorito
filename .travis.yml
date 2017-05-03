@@ -1,0 +1,17 @@
+sudo: false
+language: python
+script: 'make test package'
+python:
+- '2.7'
+- '3.5'
+deploy:
+  skip_cleanup: true  
+  provider: pypi
+  user: otakup0pe
+  password:
+    secure: "wCNPrzOcPI/B0jEk1jkNjWLE2lTD99Qi3jdCMm1gB1exgHeSGQcN+dYjco0SMS3vROkMf3zUZOadNNV63/3dVa+9MKoo+MXZ8nLGIWRPbOjxUhqiTmLfK6n2nE3/aTuDiqWG1U78J1W9jXpWFMjByyKm/s0hQaFMxtXAXq6yd+0gbWsFlhPEHq/4YTqCHsapufxtZ/dnGdFKtHvxv72/qcnHlKKhLxYgHp6ZJaFHGLwwW8WEqXaklUXVlut9/awKnB+wWIrdELBhahDTXqim/sNGBqQnZV7IrSgH6g/uljwpo0eSwUcpXvMhmv74EIF46H2NCPh1H+ogk9Spu93Y1fxa+28KmO7hjOPx0JwzV214Aw2X7t7kFVcpwLdey92mdVhgoMpIx1/wM1fqYp/2KCJOJDHCxZDjLr8GKpRiH5hABYkgrHYbax+3gJXOFr2XmT6Qlpsz4yRJfw9O9dxM6N/4ZhGL9HqUJBcSrPaGfzCxsp+LFy5f/0Bn8EUaB2WgPmPpGuhbW3J0fQJkXOodrmHbjsE9exgmWgdRM9WTpGrv0F+XvEStMMI1snZCZX5kQSwl9ol2oxxCK5GiIadaHUD+3wHWAhE1cVxqEjRxLyAkJ39z9Jj9EuRBWZS6WUV6X+4mVuQigwjY7XL/x3G3UyGFVAhdjhxG2ez+apgFg3s="
+  on:
+    tags: true
+    all_branches: true
+    repo: Autodesk/cryptorito
+    condition: '$TRAVIS_PYTHON_VERSION == "3.5"'

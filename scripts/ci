@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+set -e
+if [ -z "$TRAVIS" ] ; then
+    PREFIX=".ci-env/bin/"
+fi
+
+"${PREFIX}pep8" cryptorito
+"${PREFIX}pylint" --rcfile=/dev/null cryptorito
+#"${PREFIX}nose2"
+"${PREFIX}bandit" -r cryptorito
