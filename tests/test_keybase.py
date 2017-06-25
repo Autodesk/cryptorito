@@ -10,7 +10,7 @@ def load_fixture(fix):
     testdir = os.path.dirname(__file__)
     path = "%s/fixtures/keybase/%s.json" % (testdir, fix)
     handle = open(path, 'r')
-    data = handle.read()
+    data = handle.read().decode("utf-8")
     handle.close()
     return data
 
