@@ -14,4 +14,4 @@ deploy:
     tags: true
     all_branches: true
     repo: Autodesk/cryptorito
-    condition: '$TRAVIS_PYTHON_VERSION == "3.5"'
+    condition: '$TRAVIS_PYTHON_VERSION == "3.6"'
