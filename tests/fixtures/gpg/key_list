@@ -1,0 +1,4 @@
+pub   rsa4096 2017-01-01 [SC] [expires: 2099-12-31]
+      AAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBB
+uid           [ unknown] Some Widget <nobody@example.com>
+sub   rsa4096 2017-03-28 [E] [expires: 2099-12-31]

@@ -6,3 +6,6 @@ awscli
 pylint
 future
 bandit
+requests_mock
+vulture
+flexmock

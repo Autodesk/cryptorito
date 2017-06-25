@@ -48,14 +48,16 @@ def flatten(iterable):
 
 def passphrase_file():
     """Read passphrase from a file. This should only ever be
-    used by our built in integration tests."""
+    used by our built in integration tests. At this time,
+    during normal operation, only pinentry is supported for
+    entry of passwords."""
     if 'CRYPTORITO_PASSPHRASE_FILE' in os.environ:
         pass_file = os.environ['CRYPTORITO_PASSPHRASE_FILE']
         if not os.path.isfile(pass_file):
             raise CryptoritoError('CRYPTORITO_PASSPHRASE_FILE is invalid')
 
-        return ["--batch", "--passphrase-file",
-                pass_file]
+        return ["--batch", "--passphrase-file", pass_file,
+                "--pinentry-mode", "loopback"]
     else:
         return []
 
@@ -91,10 +93,15 @@ def massage_key(key):
     }
 
 
+def keybase_lookup_url(username):
+    """Returns the URL for looking up a user in Keybase"""
+    return "https://keybase.io/_/api/1.0/user/lookup.json?usernames=%s" \
+        % username
+
+
 def key_from_keybase(username):
     """Look up a public key from a username"""
-    url = "https://keybase.io/_/api/1.0/user/lookup.json?usernames=%s" \
-          % username
+    url = keybase_lookup_url(username)
     resp = requests.get(url)
     if resp.status_code == 200:
         j_resp = json.loads(resp.content)
@@ -116,8 +123,7 @@ def has_gpg_key(fingerprint):
     cmd = flatten([gnupg_bin(), gnupg_home(), "--list-public-keys"])
     keys = subprocess.check_output(cmd)  # nosec
     lines = keys.split('\n')
-    pub_keys = [line for line in lines if line.startswith('pub')]
-    return len([key for key in pub_keys if key.find(fingerprint) > -1]) == 1
+    return len([key for key in lines if key.find(fingerprint) > -1]) == 1
 
 
 def import_gpg_key(key):
@@ -152,7 +158,7 @@ def encrypt(source, dest, keys):
 
 def decrypt(source, dest):
     """Attempts to decrypt a file"""
-    cmd = flatten([gnupg_bin(), "--output", dest, "--decrypt",
+    cmd = flatten([gnupg_bin(), "--output", dest, "--decrypt", "--verbose",
                    gnupg_home(), passphrase_file(), source])
     # we confirm the source file exists in filez.thaw
     try:
