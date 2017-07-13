@@ -7,5 +7,6 @@ fi
 
 "${PREFIX}pep8" cryptorito
 "${PREFIX}pylint" --rcfile=/dev/null cryptorito
-#"${PREFIX}nose2"
+"${PREFIX}nose2"
 "${PREFIX}bandit" -r cryptorito
+"${PREFIX}vulture" cryptorito tests/whitelist.py
