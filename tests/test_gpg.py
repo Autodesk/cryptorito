@@ -5,12 +5,12 @@ import subprocess
 import cryptorito
 
 TEST_KEY='AAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBB'
-def key_resp(_ignored):
+def key_resp(_command, stderr=None):
     testdir = os.path.dirname(__file__)
     path = "%s/fixtures/gpg/key_list" % (testdir)
     return open(path, 'r').read()
 
-def key_blank(_ignored):
+def key_blank(_command, stderr=None):
     return ''
 
 class HasKeys(unittest.TestCase):
