@@ -166,7 +166,7 @@ def stderr_output(cmd):
     except subprocess.CalledProcessError as exception:
         LOGGER.debug("GPG Command %s", ' '.join(exception.cmd))
         LOGGER.debug("GPG Output %s", exception.output)
-        raise CryptoritoError('GPG encryption error')
+        raise CryptoritoError('GPG Execution')
 
 
 def import_gpg_key(key):
@@ -243,13 +243,14 @@ def decrypt(source, dest=None):
         raise CryptoritoError("Encrypted file %s not found" % source)
 
     cmd = [gnupg_bin(), gnupg_verbose(), "--decrypt",
-           gnupg_home(), passphrase_file(), source]
+           gnupg_home(), passphrase_file()]
 
     if dest:
-        cmd = cmd.append(["--output", dest])
+        cmd.append(["--output", dest])
 
-    cmd = flatten(cmd)
-    stderr_output(cmd)
+    cmd.append([source])
+
+    stderr_output(flatten(cmd))
     return True
 
 
