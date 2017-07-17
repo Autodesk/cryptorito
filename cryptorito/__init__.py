@@ -2,7 +2,10 @@
 from __future__ import print_function
 import collections
 import itertools as IT
+import sys
 import os
+import re
+from base64 import b64encode, b64decode
 import logging
 import json
 from tempfile import mkstemp
@@ -74,6 +77,14 @@ def gnupg_home():
         return []
 
 
+def gnupg_verbose():
+    """Maybe return the verbose option, maybe do not"""
+    if LOGGER.getEffectiveLevel() == logging.DEBUG:
+        return ["--verbose"]
+
+    return []
+
+
 def gnupg_bin():
     """Return the path to the gpg binary"""
     cmd = ["which", "gpg2"]
@@ -121,9 +132,41 @@ def has_gpg_key(fingerprint):
 
     fingerprint = fingerprint.upper()
     cmd = flatten([gnupg_bin(), gnupg_home(), "--list-public-keys"])
-    keys = subprocess.check_output(cmd)  # nosec
+    keys = stderr_output(cmd)
     lines = keys.split('\n')
     return len([key for key in lines if key.find(fingerprint) > -1]) == 1
+
+
+def stderr_handle():
+    """Generate debug-level appropriate stderr context for
+    executing things through subprocess. Normally stderr gets
+    sent to dev/null but when debugging it is sent to stdout."""
+    gpg_stderr = None
+    handle = None
+    if LOGGER.getEffectiveLevel() <= logging.DEBUG:
+        gpg_stderr = subprocess.STDOUT
+    else:
+        handle = open(os.devnull, 'wb')
+        gpg_stderr = handle
+
+    return handle, gpg_stderr
+
+
+def stderr_output(cmd):
+    """Wraps the execution of check_output in a way that
+    ignores stderr when not in debug mode"""
+
+    handle, gpg_stderr = stderr_handle()
+    try:
+        output = subprocess.check_output(cmd, stderr=gpg_stderr)  # nosec
+        if handle:
+            handle.close()
+
+        return output
+    except subprocess.CalledProcessError as exception:
+        LOGGER.debug("GPG Command %s", ' '.join(exception.cmd))
+        LOGGER.debug("GPG Output %s", exception.output)
+        raise CryptoritoError('GPG encryption error')
 
 
 def import_gpg_key(key):
@@ -133,10 +176,28 @@ def import_gpg_key(key):
     key_handle.write(key)
     key_handle.close()
     cmd = flatten([gnupg_bin(), gnupg_home(), "--import", key_filename])
-    # we trust mkstep to be legit
-    output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)  # nosec
+    output = stderr_output(cmd)
     msg = 'gpg: Total number processed: 1'
     return len([line for line in output.split('\n') if line == msg]) == 1
+
+
+def export_gpg_key(key):
+    """Exports a GPG key and returns it"""
+    cmd = flatten([gnupg_bin(), gnupg_verbose(), gnupg_home(),
+                   "--export", key, "--armor"])
+    handle, gpg_stderr = stderr_handle()
+    try:
+        gpg_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,  # nosec
+                                    stderr=gpg_stderr)
+        output, _err = gpg_proc.communicate()
+        if handle:
+            handle.close()
+
+        return output
+    except subprocess.CalledProcessError as exception:
+        LOGGER.debug("GPG Command %s", ' '.join(exception.cmd))
+        LOGGER.debug("GPG Output %s", exception.output)
+        raise CryptoritoError('GPG encryption error')
 
 
 def encrypt(source, dest, keys):
@@ -145,27 +206,81 @@ def encrypt(source, dest, keys):
     cmd = flatten([gnupg_bin(), "--armor", "--output", dest,
                    gnupg_home(), passphrase_file(), recipients,
                    "--encrypt", source])
-    # gpg keys are validated in filez.grok_keys
-    try:
-        subprocess.check_output(cmd, stderr=subprocess.STDOUT)  # nosec
-    except subprocess.CalledProcessError as exception:
-        LOGGER.debug("GPG Command %s", ' '.join(exception.cmd))
-        LOGGER.debug("GPG Output %s", exception.output)
-        raise CryptoritoError('GPG encryption error')
 
+    stderr_output(cmd)
     return True
 
 
-def decrypt(source, dest):
+def gpg_error(exception, message):
+    """Handles the output of subprocess errors
+    in a way that is compatible with the log level"""
+    LOGGER.debug("GPG Command %s", ' '.join(exception.cmd))
+    LOGGER.debug("GPG Output %s", exception.output)
+    raise CryptoritoError(message)
+
+
+def decrypt_var(source):
+    """Attempts to decrypt a variable"""
+    cmd = flatten([gnupg_bin(), "--decrypt", gnupg_verbose(),
+                   gnupg_home(), passphrase_file()])
+    handle, gpg_stderr = stderr_handle()
+    try:
+        gpg_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,  # nosec
+                                    stdin=subprocess.PIPE, stderr=gpg_stderr)
+        output, _err = gpg_proc.communicate(source)
+        if handle:
+            handle.close()
+
+        gpg_proc.stdin.close()
+        return output
+    except subprocess.CalledProcessError as exception:
+        return gpg_error(exception, 'GPG variable decryption error')
+
+
+def decrypt(source, dest=None):
     """Attempts to decrypt a file"""
-    cmd = flatten([gnupg_bin(), "--output", dest, "--decrypt", "--verbose",
-                   gnupg_home(), passphrase_file(), source])
-    # we confirm the source file exists in filez.thaw
-    try:
-        subprocess.check_output(cmd, stderr=subprocess.STDOUT)  # nosec
-    except subprocess.CalledProcessError as exception:
-        LOGGER.debug("GPG Command %s", ' '.join(exception.cmd))
-        LOGGER.debug("GPG Output %s", exception.output)
-        raise CryptoritoError('GPG decryption error')
+    if not os.path.exists(source):
+        raise CryptoritoError("Encrypted file %s not found" % source)
 
+    cmd = [gnupg_bin(), gnupg_verbose(), "--decrypt",
+           gnupg_home(), passphrase_file(), source]
+
+    if dest:
+        cmd = cmd.append(["--output", dest])
+
+    cmd = flatten(cmd)
+    stderr_output(cmd)
     return True
+
+
+def is_base64(string):
+    """Determines whether or not a string is likely to
+    be base64 encoded binary nonsense"""
+    return (not re.match('^[0-9]+$', string)) and \
+        (len(string) % 4 == 0) and \
+        re.match('^[A-Za-z0-9+/]+[=]{0,2}$', string)
+
+
+def portable_b64encode(thing):
+    """Wrap b64encode for Python 2 & 3"""
+    if sys.version_info >= (3, 0):
+        try:
+            some_bits = bytes(thing, 'utf-8')
+        except TypeError:
+            some_bits = thing
+
+        return b64encode(some_bits).decode('utf-8')
+
+    return b64encode(thing)
+
+
+def portable_b64decode(thing):
+    """Consistent b64decode in Python 2 & 3"""
+    if sys.version_info >= (3, 0):
+        decoded = b64decode(thing)
+        try:
+            return decoded.decode('utf-8')
+        except UnicodeDecodeError:
+            return decoded
+
+    return b64decode(thing)
