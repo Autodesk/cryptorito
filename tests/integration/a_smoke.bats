@@ -8,13 +8,16 @@ setup() {
 }
 
 @test "a happy path" {
-    skip
     VAR="$RANDOM"
     RECP="${GPGID}"
     run_cryptorito 0 encrypt "$RECP" <<< "$VAR"
-    echo "${lines[@]}" > "${FIXTURE_DIR}/enc"
-    run_cryptorito 0 decrypt < "${FIXTURE_DIR}/enc"
-    ALSO_VAR="${lines[@]}"
+    grep -v -E "^gpg:.+$" <<< "$output" > "${FIXTURE_DIR}/enc"
+    # for some reason the output is prefixed by all this "gpg:" stuff in
+    # test contexts. not when running otherwise :(
+    run_cryptorito 0 decrypt < "${FIXTURE_DIR}/enc" 
+    echo "$output" > "${FIXTURE_DIR}/dec"
+    ALSO_VAR=$(grep -v -E "^gpg:.+$" "${FIXTURE_DIR}/dec")
+    echo "AAAAA $VAR $ALSO_VAR"
     [ "$VAR" == "$ALSO_VAR" ]
     run_cryptorito 0 has_key "$GPGID"
     run_cryptorito 1 has_key "nope"
@@ -26,6 +29,8 @@ setup() {
     FILE3="${FIXTURE_DIR}/ayyydec${RANDOM}"
     echo "$RANDOM" > "$FILE1"
     run_cryptorito 0 encrypt_file "$FILE1" "$FILE2" "$GPGID"
+    gpg --list-secret-keys
+    cat "$FILE2"
     run_cryptorito 0 decrypt_file "$FILE2" "$FILE3"
     [ "$(cat $FILE1)" == "$(cat $FILE3)" ]
 }

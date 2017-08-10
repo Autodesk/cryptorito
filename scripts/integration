@@ -19,5 +19,5 @@ if [ ! -d "$BATSBIN" ] ; then
     cd "$BATSGIT"
     ./install.sh "$BATSBIN"
 fi
-
+gpg2 --version
 "${ROOTDIR}/.bats/bin/bats" "${ROOTDIR}/tests/integration/a_smoke.bats"
