@@ -41,6 +41,7 @@ run_cryptorito() {
     RC="$1"
     shift
     run coverage run -a --source "${CIDIR}/cryptorito/" "${CIDIR}/cryptorito.py" $@
+    echo "${lines[@]}"
     [ $status -eq "$RC" ]
 }
 
