@@ -1,5 +1,19 @@
+ifndef TRAVIS
+	CIENV = $(shell pwd)/.ci-env/bin/
+endif
+
 test: testenv version
-	./scripts/ci
+	coverage erase
+	$(CIENV)pep8 cryptorito
+	$(CIENV)pylint --rcfile=/dev/null cryptorito
+	COVERAGE_FILE=.coverage $(CIENV)nose2 -C --coverage cryptorito cryptorito
+	md5 .coverage
+	$(CIENV)bandit -r cryptorito
+	$(CIENV)vulture cryptorito cryptorito.py tests/whitelist.py
+	./scripts/integration
+	md5 .coverage
+	coverage report -m
+	coverage erase
 
 version:
 	cp version cryptorito/version
@@ -12,5 +26,11 @@ testenv:
 
 package: version
 	python setup.py sdist
+
+clean:
+	rm -rf cryptorito.egg-info dist build *.pyc cryptorito/__pycache__ cryptorito/version
+
+distclean: clean
+	rm -rf .bats .bats-git .ci-env
 
 .PHONY: package test clean testenv version

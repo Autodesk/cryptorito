@@ -200,15 +200,38 @@ def export_gpg_key(key):
         raise CryptoritoError('GPG encryption error')
 
 
+def recipients_args(keys):
+    """Returns the list representation of a set of GPG
+    keys to be used as recipients when encrypting."""
+    return [["--recipient", key.encode('ASCII')] for key in keys]
+
+
 def encrypt(source, dest, keys):
     """Encrypts a file using the given keys"""
-    recipients = [["--recipient", key.encode('ASCII')] for key in keys]
-    cmd = flatten([gnupg_bin(), "--armor", "--output", dest,
-                   gnupg_home(), passphrase_file(), recipients,
+    cmd = flatten([gnupg_bin(), "--armor", "--output", dest, gnupg_verbose(),
+                   gnupg_home(), passphrase_file(), recipients_args(keys),
                    "--encrypt", source])
 
     stderr_output(cmd)
     return True
+
+
+def encrypt_var(source, keys):
+    """Attempts to encrypt a variable"""
+    cmd = flatten([gnupg_bin(), "--armor", "--encrypt", gnupg_verbose(),
+                   recipients_args(keys)])
+    handle, gpg_stderr = stderr_handle()
+    try:
+        gpg_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,  # nosec
+                                    stdin=subprocess.PIPE, stderr=gpg_stderr)
+        output, _err = gpg_proc.communicate(source)
+        if handle:
+            handle.close()
+
+        gpg_proc.stdin.close()
+        return output
+    except subprocess.CalledProcessError as exception:
+        return gpg_error(exception, 'GPG variable encryption error')
 
 
 def gpg_error(exception, message):

@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -e
+SCRIPTDIR=$( cd ${0%/*} && pwd)
+ROOTDIR=${SCRIPTDIR%/*}
+export CIDIR="$ROOTDIR"
+export ROOTDIR
+BATSGIT="${ROOTDIR}/.bats-git"
+BATSBIN="${ROOTDIR}/.bats"
+
+if [ -z "$TRAVIS" ] ; then
+    . "${ROOTDIR}/.ci-env/bin/activate"
+fi
+
+# Ensure the BATS shell script test framework is installed.
+if [ ! -d "$BATSGIT" ] ; then
+    git clone --depth 1 https://github.com/sstephenson/bats.git "$BATSGIT"
+fi
+if [ ! -d "$BATSBIN" ] ; then
+    cd "$BATSGIT"
+    ./install.sh "$BATSBIN"
+fi
+
+"${ROOTDIR}/.bats/bin/bats" "${ROOTDIR}/tests/integration/a_smoke.bats"

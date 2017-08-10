@@ -3,3 +3,5 @@ cryptorito/version
 cryptorito.egg-info/
 *.pyc
 dist/
+.bats
+.bats-git
