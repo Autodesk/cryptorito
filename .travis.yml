@@ -1,6 +1,8 @@
 sudo: false
 language: python
 script: 'make test package'
+install:
+  - "apt-get install gpg2"
 python:
 - '2.7'
 - '3.6'
