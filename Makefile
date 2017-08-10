@@ -9,7 +9,7 @@ test: testenv version
 	COVERAGE_FILE=.coverage $(CIENV)nose2 -C --coverage cryptorito cryptorito
 	$(CIENV)bandit -r cryptorito
 	$(CIENV)vulture cryptorito cryptorito.py tests/whitelist.py
-	./scripts/integration
+	test -z $(TRAVIS) && (./scripts/integration) || true
 	coverage report -m
 	coverage erase
 
