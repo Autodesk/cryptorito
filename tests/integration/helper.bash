@@ -40,8 +40,7 @@ Passphrase: ${PASS}
 run_cryptorito() {
     RC="$1"
     shift
-    run coverage run -a --source "${CIDIR}/cryptorito/" "${CIDIR}/cryptorito.py" $@ 2> /dev/null
-    echo "${lines[@]}"
+    run coverage run -a --source "${CIDIR}/cryptorito/" "${CIDIR}/cryptorito.py" $@
     [ $status -eq "$RC" ]
 }
 
