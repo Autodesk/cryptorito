@@ -28,6 +28,7 @@ Expire-Date: 300
 Passphrase: ${PASS}
 %commit
 "
+    gpg --list-keys
     GPGID=$(gpg --list-keys 2>/dev/null | grep -A1 -e 'pub   rsa2048'  | tail -n 1 | sed -e 's! !!g')
     [ ! -z "$GPGID" ]
 }
