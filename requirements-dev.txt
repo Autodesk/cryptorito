@@ -9,3 +9,5 @@ bandit
 requests_mock
 vulture
 flexmock
+coverage
+cov-core
