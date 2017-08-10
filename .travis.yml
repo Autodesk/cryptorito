@@ -4,6 +4,10 @@ script: 'make test package'
 python:
 - '2.7'
 - '3.6'
+addons:
+  apt:
+    packages:
+      - gnupg2
 deploy:
   skip_cleanup: true  
   provider: pypi

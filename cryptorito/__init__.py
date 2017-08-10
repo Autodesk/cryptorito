@@ -62,19 +62,19 @@ def passphrase_file():
     used by our built in integration tests. At this time,
     during normal operation, only pinentry is supported for
     entry of passwords."""
+    cmd = []
     if 'CRYPTORITO_PASSPHRASE_FILE' in os.environ:
         pass_file = os.environ['CRYPTORITO_PASSPHRASE_FILE']
         if not os.path.isfile(pass_file):
             raise CryptoritoError('CRYPTORITO_PASSPHRASE_FILE is invalid')
 
-        cmd = ["--batch", "--passphrase-file", pass_file]
-        vsn = gpg_version()
-        if vsn.split(".")[0] == 2 and vsn.split(".")[1] >= 1:
-            cmd = cmd.append("--pinentry-mode loopback")
+        cmd = cmd + ["--batch", "--passphrase-file", pass_file]
 
-        return cmd
-    else:
-        return []
+        vsn = gpg_version()
+        if int(vsn.split(".")[0]) == 2 and int(vsn.split(".")[1] >= 1):
+            cmd = cmd + ["--pinentry-mode", "loopback"]
+
+    return cmd
 
 
 def gnupg_home():
