@@ -1,5 +1,5 @@
 # -*- mode: Shell-script;bash -*-
-
+OS=$(uname -s)
 function gpg_fixture() {
     FIXTURE_DIR="${BATS_TMPDIR}/fixtures"    
     export GNUPGHOME="${FIXTURE_DIR}/.gnupg"
@@ -29,14 +29,18 @@ Passphrase: ${PASS}
 %commit
 "
     gpg --list-keys
-    GPGID=$(gpg --list-keys 2>/dev/null | grep -A1 -e 'pub   rsa2048'  | tail -n 1 | sed -e 's! !!g')
+    if [ "$OS" == "Darwin" ] ; then
+        GPGID=$(gpg --list-keys 2> /dev/null | grep -A1 -e 'pub   rsa2048'  | tail -n 1 | sed -e 's! !!g')
+    elif [ "$OS" == "Linux" ] ; then
+        GPGID=$(gpg --list-keys 2> /dev/null | grep -e 'pub   2048R' | awk '{print $2}' | cut -f 2 -d '/')
+    fi
     [ ! -z "$GPGID" ]
 }
 
 run_cryptorito() {
     RC="$1"
     shift
-    run coverage run -a --source "${CIDIR}/cryptorito/" "${CIDIR}/cryptorito.py" $@
+    run coverage run -a --source "${CIDIR}/cryptorito/" "${CIDIR}/cryptorito.py" $@ 2> /dev/null
     echo "${lines[@]}"
     [ $status -eq "$RC" ]
 }

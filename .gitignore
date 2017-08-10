@@ -5,3 +5,4 @@ cryptorito.egg-info/
 dist/
 .bats
 .bats-git
+.coverage

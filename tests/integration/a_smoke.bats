@@ -12,7 +12,8 @@ setup() {
     RECP="${GPGID}"
     run_cryptorito 0 encrypt "$RECP" <<< "$VAR"
     echo "${lines[@]}" > "${FIXTURE_DIR}/enc"
-    run_cryptorito 0 decrypt < "${FIXTURE_DIR}/enc"
+    run_cryptorito 0 decrypt <<< tail -n 1 < "${FIXTURE_DIR}/enc"
+    echo "${lines[@]}"
     ALSO_VAR="${lines[@]}"
     [ "$VAR" == "$ALSO_VAR" ]
     run_cryptorito 0 has_key "$GPGID"

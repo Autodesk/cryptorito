@@ -25,6 +25,14 @@ class CryptoritoError(Exception):
             super(CryptoritoError, self).__init__()
 
 
+def gpg_version():
+    """Returns the GPG version"""
+    cmd = flatten([gnupg_bin(), "--version"])
+    val = subprocess.check_output(cmd)  # nosec
+    return val.split("\n")[0] \
+              .split(" ")[2]
+
+
 def actually_flatten(iterable):
     """Flatten iterables"""
     remainder = iter(iterable)
@@ -59,8 +67,12 @@ def passphrase_file():
         if not os.path.isfile(pass_file):
             raise CryptoritoError('CRYPTORITO_PASSPHRASE_FILE is invalid')
 
-        return ["--batch", "--passphrase-file", pass_file,
-                "--pinentry-mode", "loopback"]
+        cmd = ["--batch", "--passphrase-file", pass_file]
+        vsn = gpg_version()
+        if vsn.split(".")[0] == 2 and vsn.split(".")[1] >= 1:
+            cmd = cmd.append("--pinentry-mode loopback")
+
+        return cmd
     else:
         return []
 
@@ -82,7 +94,7 @@ def gnupg_verbose():
     if LOGGER.getEffectiveLevel() == logging.DEBUG:
         return ["--verbose"]
 
-    return []
+    return ["-q"]
 
 
 def gnupg_bin():
@@ -143,9 +155,7 @@ def stderr_handle():
     sent to dev/null but when debugging it is sent to stdout."""
     gpg_stderr = None
     handle = None
-    if LOGGER.getEffectiveLevel() <= logging.DEBUG:
-        gpg_stderr = subprocess.STDOUT
-    else:
+    if LOGGER.getEffectiveLevel() < logging.DEBUG:
         handle = open(os.devnull, 'wb')
         gpg_stderr = handle
 
