@@ -71,7 +71,7 @@ def passphrase_file():
         cmd = cmd + ["--batch", "--passphrase-file", pass_file]
 
         vsn = gpg_version()
-        if int(vsn.split(".")[0]) == 2 and int(vsn.split(".")[1] >= 1):
+        if int(vsn.split(".")[0]) == 2 and int(vsn.split(".")[1]) >= 1:
             cmd = cmd + ["--pinentry-mode", "loopback"]
 
     return cmd
@@ -219,7 +219,7 @@ def recipients_args(keys):
 def encrypt(source, dest, keys):
     """Encrypts a file using the given keys"""
     cmd = flatten([gnupg_bin(), "--armor", "--output", dest, gnupg_verbose(),
-                   gnupg_home(), passphrase_file(), recipients_args(keys),
+                   gnupg_home(), recipients_args(keys),
                    "--encrypt", source])
 
     stderr_output(cmd)
