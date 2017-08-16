@@ -29,23 +29,42 @@ def gpg_version():
     """Returns the GPG version"""
     cmd = flatten([gnupg_bin(), "--version"])
     val = subprocess.check_output(cmd)  # nosec
+    if sys.version_info >= (3, 0):
+        val = val.decode('utf-8')
+
     return val.split("\n")[0] \
               .split(" ")[2]
 
 
+def not_a_string(obj):
+    """It's probably not a string, in the sense
+    that Python2/3 get confused about these things"""
+    my_type = str(type(obj))
+    if sys.version_info >= (3, 0):
+        return my_type.find('bytes') < 0
+
+    return my_type.find('str') < 0 and \
+        my_type.find('unicode') < 0
+
+
 def actually_flatten(iterable):
-    """Flatten iterables"""
+    """Flatten iterables
+    This is super ugly. There must be a cleaner py2/3 way
+    of handling this."""
     remainder = iter(iterable)
+    is_py3 = sys.version_info >= (3, 0)
     while True:
         first = next(remainder)
         # Python 2/3 compat
+        is_iter = isinstance(first, collections.Iterable)
         try:
             basestring
         except NameError:
-            # Python 2/3 compat
             basestring = str  # pylint: disable=W0622
-        if isinstance(first, collections.Iterable) and \
-           not isinstance(first, basestring):
+
+        if is_py3 and is_iter and not_a_string(remainder):
+            remainder = IT.chain(first, remainder)
+        elif (not is_py3) and is_iter and not isinstance(first, basestring):
             remainder = IT.chain(first, remainder)
         else:
             yield first
@@ -145,6 +164,9 @@ def has_gpg_key(fingerprint):
     fingerprint = fingerprint.upper()
     cmd = flatten([gnupg_bin(), gnupg_home(), "--list-public-keys"])
     keys = stderr_output(cmd)
+    if sys.version_info >= (3, 0):
+        keys = keys.decode('utf-8')
+
     lines = keys.split('\n')
     return len([key for key in lines if key.find(fingerprint) > -1]) == 1
 
@@ -181,13 +203,23 @@ def stderr_output(cmd):
 
 def import_gpg_key(key):
     """Imports a GPG key"""
+    print("ASDFASDFSDF %s" % key)
+    if not key:
+        raise CryptoritoError('Invalid GPG Key')
+
     key_fd, key_filename = mkstemp("cryptorito-gpg-import")
     key_handle = os.fdopen(key_fd, 'w')
+    if sys.version_info >= (3, 0):
+        key = key.decode('utf-8')
+
     key_handle.write(key)
     key_handle.close()
     cmd = flatten([gnupg_bin(), gnupg_home(), "--import", key_filename])
     output = stderr_output(cmd)
     msg = 'gpg: Total number processed: 1'
+    if sys.version_info >= (3, 0):
+        output = output.decode('utf-8')
+
     return len([line for line in output.split('\n') if line == msg]) == 1
 
 
@@ -234,6 +266,10 @@ def encrypt_var(source, keys):
     try:
         gpg_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,  # nosec
                                     stdin=subprocess.PIPE, stderr=gpg_stderr)
+
+        if sys.version_info >= (3, 0):
+            source = bytes(source, 'utf-8')
+
         output, _err = gpg_proc.communicate(source)
         if handle:
             handle.close()
@@ -260,6 +296,9 @@ def decrypt_var(source):
     try:
         gpg_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,  # nosec
                                     stdin=subprocess.PIPE, stderr=gpg_stderr)
+        if sys.version_info >= (3, 0):
+            source = bytes(source, 'utf-8')
+
         output, _err = gpg_proc.communicate(source)
         if handle:
             handle.close()
