@@ -6,12 +6,12 @@ test: testenv version
 	coverage erase
 	$(CIENV)pep8 cryptorito
 	$(CIENV)pylint --rcfile=/dev/null cryptorito
-	COVERAGE_FILE=.coverage $(CIENV)nose2 -C --coverage cryptorito cryptorito
+	COVERAGE_FILE=.coverage $(CIENV)nose2 -C cryptorito --coverage cryptorito
 	$(CIENV)bandit -r cryptorito
 	$(CIENV)vulture cryptorito cryptorito.py tests/whitelist.py
 	./scripts/integration
 	coverage report -m
-	text -z $(TRAVIS) && coverage erase|| true
+	test -z $(TRAVIS) && coverage erase|| true
 
 version:
 	cp version cryptorito/version
