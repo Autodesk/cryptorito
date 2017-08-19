@@ -11,7 +11,7 @@ test: testenv version
 	$(CIENV)vulture cryptorito cryptorito.py tests/whitelist.py
 	./scripts/integration
 	coverage report -m
-	coverage erase
+	text -z $(TRAVIS) && coverage erase|| true
 
 version:
 	cp version cryptorito/version
