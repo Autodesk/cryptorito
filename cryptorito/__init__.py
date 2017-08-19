@@ -41,7 +41,8 @@ def not_a_string(obj):
     that Python2/3 get confused about these things"""
     my_type = str(type(obj))
     if sys.version_info >= (3, 0):
-        return my_type.find('bytes') < 0
+        is_str = my_type.find('bytes') < 0 and my_type.find('str') < 0
+        return is_str
 
     return my_type.find('str') < 0 and \
         my_type.find('unicode') < 0
@@ -62,7 +63,7 @@ def actually_flatten(iterable):
         except NameError:
             basestring = str  # pylint: disable=W0622
 
-        if is_py3 and is_iter and not_a_string(remainder):
+        if is_py3 and is_iter and not_a_string(first):
             remainder = IT.chain(first, remainder)
         elif (not is_py3) and is_iter and not isinstance(first, basestring):
             remainder = IT.chain(first, remainder)
@@ -203,7 +204,6 @@ def stderr_output(cmd):
 
 def import_gpg_key(key):
     """Imports a GPG key"""
-    print("ASDFASDFSDF %s" % key)
     if not key:
         raise CryptoritoError('Invalid GPG Key')
 
