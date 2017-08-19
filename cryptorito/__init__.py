@@ -178,7 +178,7 @@ def stderr_handle():
     sent to dev/null but when debugging it is sent to stdout."""
     gpg_stderr = None
     handle = None
-    if LOGGER.getEffectiveLevel() < logging.DEBUG:
+    if LOGGER.getEffectiveLevel() > logging.DEBUG:
         handle = open(os.devnull, 'wb')
         gpg_stderr = handle
 
