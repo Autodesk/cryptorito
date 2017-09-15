@@ -186,9 +186,6 @@ def has_gpg_key(fingerprint):
     for key in pubkeys:
         # loop over the lines of the key split by \n
         for line in key.split("\n"):
-        # if the line starts with rsa
-            if re.match('^rsa', line) is not None:
-                pub_info = line
             if re.match('^ {6}', line) is not None:
                 pub_key = re.split("\s+", line)
                 list.append(pub_key[1])
