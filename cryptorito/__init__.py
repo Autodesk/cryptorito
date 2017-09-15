@@ -171,26 +171,24 @@ def has_gpg_key(fingerprint):
     # split the list of keys up by the string "pub "
     pubkeys = keys.split("pub   ")
 
-    # set number of items to delete from output
-    n = 1
     # delete the un-necessary lines
     #
     # eg
     #
     # /Users/addlema/.gnupg/pubring.kbx    <-- index 0
     # ---------------------------------    <-- index 1
-    del pubkeys[:n]
-    # create a blank list
-    list = []
+    del pubkeys[:1]
+    # create a pubkeys_list
+    pubkeys_list = []
     # start loop of
     for key in pubkeys:
         # loop over the lines of the key split by \n
         for line in key.split("\n"):
             if re.match('^ {6}', line) is not None:
-                pub_key = re.split("\s+", line)
-                list.append(pub_key[1])
+                pub_key = re.split(r"\s+", line)
+                pubkeys_list.append(pub_key[1])
 
-    return fingerprint.decode("utf-8") in str(list)
+    return fingerprint.decode("utf-8") in str(pubkeys_list)
 
 
 def stderr_handle():
