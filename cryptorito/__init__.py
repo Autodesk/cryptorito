@@ -162,7 +162,7 @@ def has_gpg_key(fingerprint):
     if len(fingerprint) > 8:
         fingerprint = fingerprint[-8:]
 
-    fingerprint = fingerprint.upper()
+    fingerprint = fingerprint.upper().rstrip()
     cmd = flatten([gnupg_bin(), gnupg_home(), "--list-public-keys"])
     keys = stderr_output(cmd)
     if sys.version_info >= (3, 0):
@@ -188,7 +188,12 @@ def has_gpg_key(fingerprint):
                 pub_key = re.split(r"\s+", line)
                 pubkeys_list.append(pub_key[1])
 
-    return fingerprint.decode("utf-8") in str(pubkeys_list)
+    try:
+        fingerprint = fingerprint.decode("utf-8")
+    except AttributeError:
+        pass
+
+    return fingerprint in str(pubkeys_list)
 
 
 def stderr_handle():
