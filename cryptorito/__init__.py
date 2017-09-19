@@ -162,14 +162,38 @@ def has_gpg_key(fingerprint):
     if len(fingerprint) > 8:
         fingerprint = fingerprint[-8:]
 
-    fingerprint = fingerprint.upper()
+    fingerprint = fingerprint.upper().rstrip()
     cmd = flatten([gnupg_bin(), gnupg_home(), "--list-public-keys"])
     keys = stderr_output(cmd)
     if sys.version_info >= (3, 0):
         keys = keys.decode('utf-8')
 
-    lines = keys.split('\n')
-    return len([key for key in lines if key.find(fingerprint) > -1]) == 1
+    # split the list of keys up by the string "pub "
+    pubkeys = keys.split("pub   ")
+
+    # delete the un-necessary lines
+    #
+    # eg
+    #
+    # /Users/addlema/.gnupg/pubring.kbx    <-- index 0
+    # ---------------------------------    <-- index 1
+    del pubkeys[:1]
+    # create a pubkeys_list
+    pubkeys_list = []
+    # start loop of
+    for key in pubkeys:
+        # loop over the lines of the key split by \n
+        for line in key.split("\n"):
+            if re.match('^ {6}', line) is not None:
+                pub_key = re.split(r"\s+", line)
+                pubkeys_list.append(pub_key[1])
+
+    try:
+        fingerprint = fingerprint.decode("utf-8")
+    except AttributeError:
+        pass
+
+    return fingerprint in str(pubkeys_list)
 
 
 def stderr_handle():
