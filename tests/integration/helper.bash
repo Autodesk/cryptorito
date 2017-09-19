@@ -8,9 +8,15 @@ function gpg_fixture() {
     fi
     mkdir -p "$GNUPGHOME"
     echo "use-agent
-always-trust
 verbose
 " > "${GNUPGHOME}/gpg.conf"
+    #
+    GPG_VSN=$(gpg --version | head -n 1 | cut -f 3 -d ' ')
+    GV_MAJ=$(cut -f 1 -d '.' <<< "$GPG_VSN")
+    GV_MIN=$(cut -f 2 -d '.' <<< "$GPG_VSN")
+    if [ "$GV_MAJ" == "2" ] && [ "$GV_MIN" -lt 1 ] ; then
+       echo "always-trust" >> "${GNUPGHOME}/gpg.conf"
+    fi
     PINENTRY="${CIDIR}/scripts/pinentry-dummy.sh"
     echo "pinentry-program ${PINENTRY}" > "${GNUPGHOME}/gpg-agent.conf"
     chmod -R og-rwx "$GNUPGHOME"    
