@@ -11,7 +11,14 @@ import json
 from tempfile import mkstemp
 import subprocess  # nosec
 import requests
-LOGGER = logging.getLogger()
+LOGGER = logging.getLogger(__name__)
+
+if os.environ['CRYPTORITO_LOG_LEVEL']:
+    LOG_LEVEL = os.environ['CRYPTORITO_LOG_LEVEL'].lower()
+    if LOG_LEVEL == 'debug':
+        LOGGER.setLevel(logging.DEBUG)
+    elif LOG_LEVEL == 'info':
+        LOGGER.setLevel(logging.INFO)
 
 
 class CryptoritoError(Exception):
@@ -196,8 +203,10 @@ def fingerprint_from_var(var):
     cmd = flatten([gnupg_bin(), gnupg_home()])
     handle, gpg_stderr = stderr_handle()
     try:
-        gpg_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,  # nosec
-                                    stdin=subprocess.PIPE, stderr=gpg_stderr)
+        gpg_proc = subprocess.Popen(cmd,  # nosec
+                                    stdout=subprocess.PIPE,
+                                    stdin=subprocess.PIPE,
+                                    stderr=gpg_stderr)
         if sys.version_info >= (3, 0):
             var = bytes(var, 'utf-8')
 
