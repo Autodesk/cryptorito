@@ -13,12 +13,12 @@ import subprocess  # nosec
 import requests
 LOGGER = logging.getLogger(__name__)
 
-if os.environ['CRYPTORITO_LOG_LEVEL']:
+if os.environ.get('CRYPTORITO_LOG_LEVEL'):
     LOG_LEVEL = os.environ['CRYPTORITO_LOG_LEVEL'].lower()
     if LOG_LEVEL == 'debug':
-        LOGGER.setLevel(logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG)
     elif LOG_LEVEL == 'info':
-        LOGGER.setLevel(logging.INFO)
+        logging.basicConfig(level=logging.INFO)
 
 
 class CryptoritoError(Exception):
@@ -250,6 +250,7 @@ def stderr_with_input(cmd, stdin):
     """Runs a command, passing something in stdin, and returning
     whatever came out from stdout"""
     handle, gpg_stderr = stderr_handle()
+    LOGGER.debug("GPG command %s", ' '.join(cmd))
     try:
         gpg_proc = subprocess.Popen(cmd,  # nosec
                                     stdout=subprocess.PIPE,
@@ -343,8 +344,7 @@ def gpg_error(exception, message):
 
 def decrypt_var(source, passphrase=None):
     """Attempts to decrypt a variable"""
-    cmd_bits = [gnupg_bin(), "--decrypt", gnupg_verbose(),
-                gnupg_home()]
+    cmd_bits = [gnupg_bin(), "--decrypt", gnupg_home()]
     if not passphrase:
         cmd_bits.append(passphrase_file())
 

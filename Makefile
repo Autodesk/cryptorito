@@ -11,7 +11,7 @@ test: testenv version
 		-C --coverage cryptorito
 	$(CIENV)bandit -r cryptorito
 	$(CIENV)vulture cryptorito cryptorito.py tests/whitelist.py
-	CRYPTORITO_LOG_LEVEL=debug ./scripts/integration
+	./scripts/integration
 	coverage report -m
 	test -z $(TRAVIS) && coverage erase|| true
 
