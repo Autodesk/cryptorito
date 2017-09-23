@@ -120,18 +120,17 @@ def gnupg_verbose():
 def gnupg_bin():
     """Return the path to the gpg binary"""
     cmd = ["which", "gpg2"]
-    try:
-        # We are OK from the perspective of B603
-        output = subprocess.check_output(cmd)  # nosec
-        return output.strip()
-    except subprocess.CalledProcessError:
+    output = stderr_output(cmd).strip()
+    if not output:
         raise CryptoritoError("gpg2 must be installed")
+
+    return output
 
 
 def massage_key(key):
     """Massage the keybase return for only what we care about"""
     return {
-        'fingerprint': key['key_fingerprint'],
+        'fingerprint': key['key_fingerprint'].lower(),
         'bundle': key['bundle']
     }
 
@@ -142,17 +141,37 @@ def keybase_lookup_url(username):
         % username
 
 
-def key_from_keybase(username):
+def fingerprint_from_keybase(fingerprint, kb_obj):
+    """Extracts a key matching a specific fingerprint from a
+    Keybase API response"""
+    if 'public_keys' in kb_obj and \
+       'pgp_public_keys' in kb_obj['public_keys']:
+        for key in kb_obj['public_keys']['pgp_public_keys']:
+            keyprint = fingerprint_from_var(key).lower()
+            fingerprint = fingerprint.lower()
+            if fingerprint == keyprint or \
+               keyprint.startswith(fingerprint):
+                return {
+                    'fingerprint': keyprint,
+                    'bundle': key
+                }
+
+
+def key_from_keybase(username, fingerprint=None):
     """Look up a public key from a username"""
     url = keybase_lookup_url(username)
     resp = requests.get(url)
     if resp.status_code == 200:
         j_resp = json.loads(resp.content)
-        if 'them' in j_resp and len(j_resp['them']) == 1 \
-           and 'public_keys' in j_resp['them'][0] \
-           and 'pgp_public_keys' in j_resp['them'][0]['public_keys']:
-            key = j_resp['them'][0]['public_keys']['primary']
-            return massage_key(key)
+        if 'them' in j_resp and len(j_resp['them']) == 1:
+            kb_obj = j_resp['them'][0]
+            if fingerprint:
+                return fingerprint_from_keybase(fingerprint, kb_obj)
+            else:
+                if 'public_keys' in kb_obj \
+                   and 'pgp_public_keys' in kb_obj['public_keys']:
+                    key = kb_obj['public_keys']['primary']
+                    return massage_key(key)
 
     return None
 
@@ -170,6 +189,39 @@ def has_gpg_key(fingerprint):
 
     lines = keys.split('\n')
     return len([key for key in lines if key.find(fingerprint) > -1]) == 1
+
+
+def fingerprint_from_var(var):
+    """Extract a fingerprint from a GPG public key"""
+    cmd = flatten([gnupg_bin(), gnupg_home()])
+    handle, gpg_stderr = stderr_handle()
+    try:
+        gpg_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,  # nosec
+                                    stdin=subprocess.PIPE, stderr=gpg_stderr)
+        if sys.version_info >= (3, 0):
+            var = bytes(var, 'utf-8')
+
+        if handle:
+            handle.close()
+
+        output, _err = gpg_proc.communicate(var)
+        output = output.split('\n')
+        if not output[0].startswith('pub'):
+            raise CryptoritoError('probably an invalid gpg key')
+
+        return output[1].strip()
+    except subprocess.CalledProcessError as exception:
+        return gpg_error(exception, 'GPG variable encryption error')
+
+
+def fingerprint_from_file(filename):
+    """Extract a fingerprint from a GPG public key file"""
+    cmd = flatten([gnupg_bin(), gnupg_home(), filename])
+    outp = stderr_output(cmd).split('\n')
+    if not outp[0].startswith('pub'):
+        raise CryptoritoError('probably an invalid gpg key')
+
+    return outp[1].strip()
 
 
 def stderr_handle():
@@ -288,10 +340,14 @@ def gpg_error(exception, message):
     raise CryptoritoError(message)
 
 
-def decrypt_var(source):
+def decrypt_var(source, passphrase=None):
     """Attempts to decrypt a variable"""
-    cmd = flatten([gnupg_bin(), "--decrypt", gnupg_verbose(),
-                   gnupg_home(), passphrase_file()])
+    cmd_bits = [gnupg_bin(), "--decrypt", gnupg_verbose(),
+                gnupg_home()]
+    if not passphrase:
+        cmd_bits.append(passphrase_file())
+
+    cmd = flatten(cmd_bits)
     handle, gpg_stderr = stderr_handle()
     try:
         gpg_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,  # nosec
@@ -309,13 +365,16 @@ def decrypt_var(source):
         return gpg_error(exception, 'GPG variable decryption error')
 
 
-def decrypt(source, dest=None):
+def decrypt(source, dest=None, passphrase=None):
     """Attempts to decrypt a file"""
     if not os.path.exists(source):
         raise CryptoritoError("Encrypted file %s not found" % source)
 
     cmd = [gnupg_bin(), gnupg_verbose(), "--decrypt",
-           gnupg_home(), passphrase_file()]
+           gnupg_home()]
+
+    if not passphrase:
+        cmd.append(passphrase_file())
 
     if dest:
         cmd.append(["--output", dest])

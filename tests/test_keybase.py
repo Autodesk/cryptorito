@@ -21,3 +21,10 @@ class KeybaseTest(unittest.TestCase):
                   text=load_fixture(TEST_USER))
             keys = cryptorito.key_from_keybase(TEST_USER)
             assert keys['fingerprint'] == TEST_FINGERPRINT
+
+    def test_fingerprint(self):
+        with requests_mock.Mocker() as m:
+            m.get(cryptorito.keybase_lookup_url(TEST_USER),
+                  text=load_fixture(TEST_USER))
+            keys = cryptorito.key_from_keybase(TEST_USER, TEST_FINGERPRINT[0:8])
+            assert keys['fingerprint'] == TEST_FINGERPRINT

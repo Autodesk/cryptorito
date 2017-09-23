@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -e
+SCRIPTDIR=$( cd "${0%/*}" && pwd)
+ROOTDIR="${SCRIPTDIR%/*}"
+
+curl -s \
+     -o "${ROOTDIR}/tests/fixtures/keybase/otakup0pe.json" \
+     "https://keybase.io/_/api/1.0/user/lookup.json?usernames=otakup0pe"
