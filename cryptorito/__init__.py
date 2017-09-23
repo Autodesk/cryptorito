@@ -35,9 +35,7 @@ class CryptoritoError(Exception):
 def gpg_version():
     """Returns the GPG version"""
     cmd = flatten([gnupg_bin(), "--version"])
-    val = subprocess.check_output(cmd)  # nosec
-    if sys.version_info >= (3, 0):
-        val = val.decode('utf-8')
+    val = stderr_output(cmd)
 
     return val.split("\n")[0] \
               .split(" ")[2]
@@ -191,9 +189,6 @@ def has_gpg_key(fingerprint):
     fingerprint = fingerprint.upper()
     cmd = flatten([gnupg_bin(), gnupg_home(), "--list-public-keys"])
     keys = stderr_output(cmd)
-    if sys.version_info >= (3, 0):
-        keys = keys.decode('utf-8')
-
     lines = keys.split('\n')
     return len([key for key in lines if key.find(fingerprint) > -1]) == 1
 
@@ -201,26 +196,11 @@ def has_gpg_key(fingerprint):
 def fingerprint_from_var(var):
     """Extract a fingerprint from a GPG public key"""
     cmd = flatten([gnupg_bin(), gnupg_home()])
-    handle, gpg_stderr = stderr_handle()
-    try:
-        gpg_proc = subprocess.Popen(cmd,  # nosec
-                                    stdout=subprocess.PIPE,
-                                    stdin=subprocess.PIPE,
-                                    stderr=gpg_stderr)
-        if sys.version_info >= (3, 0):
-            var = bytes(var, 'utf-8')
+    output = stderr_with_input(cmd, var)
+    if not output[0].startswith('pub'):
+        raise CryptoritoError('probably an invalid gpg key')
 
-        if handle:
-            handle.close()
-
-        output, _err = gpg_proc.communicate(var)
-        output = output.split('\n')
-        if not output[0].startswith('pub'):
-            raise CryptoritoError('probably an invalid gpg key')
-
-        return output[1].strip()
-    except subprocess.CalledProcessError as exception:
-        return gpg_error(exception, 'GPG variable encryption error')
+    return output[1].strip()
 
 
 def fingerprint_from_file(filename):
@@ -256,11 +236,37 @@ def stderr_output(cmd):
         if handle:
             handle.close()
 
+        if sys.version_info >= (3, 0):
+            output = output.decode('utf-8')
+
         return output
     except subprocess.CalledProcessError as exception:
         LOGGER.debug("GPG Command %s", ' '.join(exception.cmd))
         LOGGER.debug("GPG Output %s", exception.output)
         raise CryptoritoError('GPG Execution')
+
+
+def stderr_with_input(cmd, stdin):
+    """Runs a command, passing something in stdin, and returning
+    whatever came out from stdout"""
+    handle, gpg_stderr = stderr_handle()
+    try:
+        gpg_proc = subprocess.Popen(cmd,  # nosec
+                                    stdout=subprocess.PIPE,
+                                    stdin=subprocess.PIPE,
+                                    stderr=gpg_stderr)
+        if sys.version_info >= (3, 0):
+            stdin = bytes(stdin, 'utf-8')
+
+        output, _err = gpg_proc.communicate(stdin)
+        output = output.split('\n')
+
+        if handle:
+            handle.close()
+
+        return output
+    except subprocess.CalledProcessError as exception:
+        return gpg_error(exception, 'GPG variable encryption error')
 
 
 def import_gpg_key(key):
@@ -323,22 +329,8 @@ def encrypt_var(source, keys):
     """Attempts to encrypt a variable"""
     cmd = flatten([gnupg_bin(), "--armor", "--encrypt", gnupg_verbose(),
                    recipients_args(keys)])
-    handle, gpg_stderr = stderr_handle()
-    try:
-        gpg_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,  # nosec
-                                    stdin=subprocess.PIPE, stderr=gpg_stderr)
-
-        if sys.version_info >= (3, 0):
-            source = bytes(source, 'utf-8')
-
-        output, _err = gpg_proc.communicate(source)
-        if handle:
-            handle.close()
-
-        gpg_proc.stdin.close()
-        return output
-    except subprocess.CalledProcessError as exception:
-        return gpg_error(exception, 'GPG variable encryption error')
+    output = stderr_with_input(cmd, source)
+    return output
 
 
 def gpg_error(exception, message):
@@ -357,21 +349,8 @@ def decrypt_var(source, passphrase=None):
         cmd_bits.append(passphrase_file())
 
     cmd = flatten(cmd_bits)
-    handle, gpg_stderr = stderr_handle()
-    try:
-        gpg_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,  # nosec
-                                    stdin=subprocess.PIPE, stderr=gpg_stderr)
-        if sys.version_info >= (3, 0):
-            source = bytes(source, 'utf-8')
-
-        output, _err = gpg_proc.communicate(source)
-        if handle:
-            handle.close()
-
-        gpg_proc.stdin.close()
-        return output
-    except subprocess.CalledProcessError as exception:
-        return gpg_error(exception, 'GPG variable decryption error')
+    output = stderr_with_input(cmd, source)
+    return output
 
 
 def decrypt(source, dest=None, passphrase=None):
@@ -379,9 +358,7 @@ def decrypt(source, dest=None, passphrase=None):
     if not os.path.exists(source):
         raise CryptoritoError("Encrypted file %s not found" % source)
 
-    cmd = [gnupg_bin(), gnupg_verbose(), "--decrypt",
-           gnupg_home()]
-
+    cmd = [gnupg_bin(), gnupg_verbose(), "--decrypt", gnupg_home()]
     if not passphrase:
         cmd.append(passphrase_file())
 
@@ -389,7 +366,6 @@ def decrypt(source, dest=None, passphrase=None):
         cmd.append(["--output", dest])
 
     cmd.append([source])
-
     stderr_output(flatten(cmd))
     return True
 

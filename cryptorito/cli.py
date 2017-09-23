@@ -34,7 +34,7 @@ def encrypt_var(csv_keys):
     encrypted against the specified keys, returning on stdout"""
     keys = massage_keys(csv_keys.split(','))
     data = sys.stdin.read()
-    encrypted = cryptorito.encrypt_var(data, keys)
+    encrypted = '\n'.join(cryptorito.encrypt_var(data, keys))
     print(cryptorito.portable_b64encode(encrypted))
 
 

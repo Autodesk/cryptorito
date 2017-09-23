@@ -16,3 +16,10 @@ class HelperTest(unittest.TestCase):
     def test_passphrase_file(self):
         os.environ['CRYPTORITO_PASSPHRASE_FILE'] = __file__
         assert cryptorito.passphrase_file()
+
+
+class NotAStringHelperTest(unittest.TestCase):
+    def test_happy_path(self):
+        assert cryptorito.not_a_string(42)
+        assert cryptorito.not_a_string(False)
+        assert cryptorito.not_a_string(dict())
