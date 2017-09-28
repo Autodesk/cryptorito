@@ -52,7 +52,6 @@ def gpg_version():
     """Returns the GPG version"""
     cmd = flatten([gnupg_bin(), "--version"])
     output = stderr_output(cmd)
-    print("ASDASD %s %s" % (cmd, output))
     output = output \
         .split('\n')[0] \
         .split(" ")[2] \
