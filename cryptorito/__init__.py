@@ -3,12 +3,14 @@ from __future__ import print_function
 import collections
 import itertools as IT
 import sys
+import atexit
 import os
 import re
+from shutil import rmtree
 from base64 import b64encode, b64decode
 import logging
 import json
-from tempfile import mkstemp
+from tempfile import mkstemp, mkdtemp
 import subprocess  # nosec
 import requests
 LOGGER = logging.getLogger(__name__)
@@ -30,6 +32,20 @@ class CryptoritoError(Exception):
             super(CryptoritoError, self).__init__(message)
         else:
             super(CryptoritoError, self).__init__()
+
+
+def clean_tmpdir(path):
+    """Invoked atexit, this removes our tmpdir"""
+    if os.path.exists(path) and \
+       os.path.isdir(path):
+        rmtree(path)
+
+
+def ensure_tmpdir():
+    """Ensures a temporary directory exists"""
+    path = mkdtemp('aomi')
+    atexit.register(clean_tmpdir, path)
+    return path
 
 
 def gpg_version():
@@ -82,17 +98,25 @@ def flatten(iterable):
     return [x for x in actually_flatten(iterable)]
 
 
-def passphrase_file():
+def passphrase_file(passphrase=None):
     """Read passphrase from a file. This should only ever be
     used by our built in integration tests. At this time,
     during normal operation, only pinentry is supported for
     entry of passwords."""
     cmd = []
-    if 'CRYPTORITO_PASSPHRASE_FILE' in os.environ:
+    pass_file = None
+    if not passphrase and 'CRYPTORITO_PASSPHRASE_FILE' in os.environ:
         pass_file = os.environ['CRYPTORITO_PASSPHRASE_FILE']
         if not os.path.isfile(pass_file):
             raise CryptoritoError('CRYPTORITO_PASSPHRASE_FILE is invalid')
+    elif passphrase:
+        tmpdir = ensure_tmpdir()
+        pass_file = "%s/p_pass" % tmpdir
+        p_handle = open(pass_file, 'w')
+        p_handle.write(passphrase)
+        p_handle.close()
 
+    if pass_file:
         cmd = cmd + ["--batch", "--passphrase-file", pass_file]
 
         vsn = gpg_version()
@@ -196,7 +220,7 @@ def has_gpg_key(fingerprint):
 def fingerprint_from_var(var):
     """Extract a fingerprint from a GPG public key"""
     cmd = flatten([gnupg_bin(), gnupg_home()])
-    output = stderr_with_input(cmd, var)
+    output = stderr_with_input(cmd, var).split('\n')
     if not output[0].startswith('pub'):
         raise CryptoritoError('probably an invalid gpg key')
 
@@ -260,7 +284,6 @@ def stderr_with_input(cmd, stdin):
             stdin = bytes(stdin, 'utf-8')
 
         output, _err = gpg_proc.communicate(stdin)
-        output = output.split('\n')
 
         if handle:
             handle.close()
@@ -344,13 +367,11 @@ def gpg_error(exception, message):
 
 def decrypt_var(source, passphrase=None):
     """Attempts to decrypt a variable"""
-    cmd_bits = [gnupg_bin(), "--decrypt", gnupg_home()]
-    if not passphrase:
-        cmd_bits.append(passphrase_file())
+    cmd_bits = [gnupg_bin(), "--decrypt", gnupg_home(), gnupg_verbose()]
+    cmd_bits.append(passphrase_file(passphrase))
 
     cmd = flatten(cmd_bits)
-    output = stderr_with_input(cmd, source)
-    return output
+    return stderr_with_input(cmd, source)
 
 
 def decrypt(source, dest=None, passphrase=None):

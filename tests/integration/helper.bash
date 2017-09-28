@@ -21,9 +21,9 @@ verbose
     echo "pinentry-program ${PINENTRY}" > "${GNUPGHOME}/gpg-agent.conf"
     chmod -R og-rwx "$GNUPGHOME"    
     # https://www.gnupg.org/documentation/manuals/gnupg/Unattended-GPG-key-generation.html
-    PASS="somegpgpass${RANDOM}"
+    export GPG_PASS="somegpgpass${RANDOM}"
     export CRYPTORITO_PASSPHRASE_FILE="${FIXTURE_DIR}/pass"
-    echo "$PASS" > "$CRYPTORITO_PASSPHRASE_FILE"
+    echo "$GPG_PASS" > "$CRYPTORITO_PASSPHRASE_FILE"
     gpg --gen-key --verbose --batch <<< "
 Key-Type: RSA
 Key-Length: 2048
@@ -31,7 +31,7 @@ Subkey-Type: RSA
 Subkey-Length: 2048
 Name-Real: cryptorito test
 Expire-Date: 300
-Passphrase: ${PASS}
+Passphrase: ${GPG_PASS}
 %commit
 "
     gpg --list-keys
@@ -48,8 +48,9 @@ run_cryptorito() {
     shift
     echo "cryptorito $*"
     run coverage run -a --source "${CIDIR}/cryptorito/" "${CIDIR}/cryptorito.py" "$@" 2> /dev/null
-    echo "$output"
+    echo "[received ${status}, expected ${RC}] $output"
     [ $status -eq "$RC" ]
+    gpgconf --reload gpg-agent
 }
 
 scan_lines() {
