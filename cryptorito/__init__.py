@@ -292,7 +292,7 @@ def stderr_with_input(cmd, stdin):
     except subprocess.CalledProcessError as exception:
         return gpg_error(exception, 'GPG variable encryption error')
     except OSError as exception:
-        return gpg_error(exception, "File %s not found" % exception.filename)
+        raise CryptoritoError("File %s not found" % exception.filename)
 
 
 def import_gpg_key(key):
