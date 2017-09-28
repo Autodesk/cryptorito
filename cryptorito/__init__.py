@@ -56,7 +56,7 @@ def gpg_version():
         .split('\n')[0] \
         .split(" ")[2] \
         .split('.')
-    return output
+    return tuple([int(x) for x in output])
 
 
 def not_a_string(obj):
@@ -180,6 +180,7 @@ def fingerprint_from_keybase(fingerprint, kb_obj):
         for key in kb_obj['public_keys']['pgp_public_keys']:
             keyprint = fingerprint_from_var(key).lower()
             fingerprint = fingerprint.lower()
+            print("ASDASD  %s %s", [keyprint, fingerprint])
             if fingerprint == keyprint or \
                keyprint.startswith(fingerprint):
                 return {
@@ -221,15 +222,19 @@ def has_gpg_key(fingerprint):
 
 def fingerprint_from_var(var):
     """Extract a fingerprint from a GPG public key"""
-    cmd = flatten([gnupg_bin(), gnupg_home()])
-    output = stderr_with_input(cmd, var).split('\n')
-
     vsn = gpg_version()
-    if vsn[0] >= 2 and vsn[1] >= 1:
-        if not output[0].startswith('pub'):
-            raise CryptoritoError('probably an invalid gpg key')
-    else:
-        raise CryptoritoError('soon')
+    cmd = flatten([gnupg_bin(), gnupg_home()])
+    if vsn[0] >= 2 and vsn[1] < 1:
+        cmd.append("--with-fingerprint")
+
+    output = stderr_with_input(cmd, var).split('\n')
+    if not output[0].startswith('pub'):
+        raise CryptoritoError('probably an invalid gpg key')
+
+    if vsn[0] >= 2 and vsn[1] < 1:
+        return output[1] \
+            .split('=')[1] \
+            .replace(' ', '')
 
     return output[1].strip()
 
