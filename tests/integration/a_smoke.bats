@@ -7,7 +7,15 @@ setup() {
     gpg_fixture
 }
 
+@test "keybase minimal" {
+    run_cryptorito 0 import_keybase "otakup0pe"
+    run_cryptorito 2 import_keybase "otakup0pe"
+    run_cryptorito 0 import_keybase "otakup0pe:077342F6"
+    VAR="beep-boop-${RANDOM}"
+}
+
 @test "a happy path" {
+    run_cryptorito 1 help
     VAR="bla-blah-blah${RANDOM}"
     RECP="${GPGID}"
     run_cryptorito 0 encrypt "$RECP" <<< "$VAR"
@@ -42,9 +50,4 @@ setup() {
     run_cryptorito 0 encrypt_file "$FILE1" "$FILE2" "$GPGID"
     run_cryptorito 0 decrypt_file "$FILE2" "$FILE3"
     [ "$(cat "$FILE1")" == "$(cat "$FILE3")" ]
-}
-
-@test "keybase minimal" {
-    run_cryptorito 0 import_keybase otakup0pe
-    run_cryptorito 2 import_keybase otakup0pe
 }

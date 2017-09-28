@@ -51,10 +51,13 @@ def ensure_tmpdir():
 def gpg_version():
     """Returns the GPG version"""
     cmd = flatten([gnupg_bin(), "--version"])
-    val = stderr_output(cmd)
-
-    return val.split("\n")[0] \
-              .split(" ")[2]
+    output = stderr_output(cmd)
+    print("ASDASD %s %s" % (cmd, output))
+    output = output \
+        .split('\n')[0] \
+        .split(" ")[2] \
+        .split('.')
+    return output
 
 
 def not_a_string(obj):
@@ -120,7 +123,7 @@ def passphrase_file(passphrase=None):
         cmd = cmd + ["--batch", "--passphrase-file", pass_file]
 
         vsn = gpg_version()
-        if int(vsn.split(".")[0]) == 2 and int(vsn.split(".")[1]) >= 1:
+        if vsn[0] >= 2 and vsn[1] >= 1:
             cmd = cmd + ["--pinentry-mode", "loopback"]
 
     return cmd
@@ -221,8 +224,13 @@ def fingerprint_from_var(var):
     """Extract a fingerprint from a GPG public key"""
     cmd = flatten([gnupg_bin(), gnupg_home()])
     output = stderr_with_input(cmd, var).split('\n')
-    if not output[0].startswith('pub'):
-        raise CryptoritoError('probably an invalid gpg key')
+
+    vsn = gpg_version()
+    if vsn[0] >= 2 and vsn[1] >= 1:
+        if not output[0].startswith('pub'):
+            raise CryptoritoError('probably an invalid gpg key')
+    else:
+        raise CryptoritoError('soon')
 
     return output[1].strip()
 

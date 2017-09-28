@@ -54,13 +54,14 @@ def has_key(key):
     sys.exit(0)
 
 
-def import_keybase(username, fingerprint=None):
+def import_keybase(username):
     """Imports a public GPG key from Keybase"""
     public_key = None
-    if not fingerprint:
-        public_key = cryptorito.key_from_keybase(username)
+    u_bits = username.split(':')
+    if len(u_bits) == 1:
+        public_key = cryptorito.key_from_keybase(u_bits[0])
     else:
-        public_key = cryptorito.key_from_keybase(username, fingerprint)
+        public_key = cryptorito.key_from_keybase(u_bits[0], u_bits[1])
 
     if cryptorito.has_gpg_key(public_key['fingerprint']):
         sys.exit(2)
