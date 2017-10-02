@@ -59,11 +59,40 @@ def gpg_version():
     return tuple([int(x) for x in output])
 
 
+def is_py3():
+    """Returns true if this is actually in the future that will
+    be running entierly on Python 3"""
+    return sys.version_info >= (3, 0)
+
+
+def polite_string(a_string):
+    """Returns a "proper" string that should work in both Py3/Py2"""
+    if is_py3() and hasattr(a_string, 'decode'):
+        try:
+            return a_string.decode('utf-8')
+        except UnicodeDecodeError:
+            return a_string
+
+    return a_string
+
+
+def polite_bytes(a_string):
+    """Returns "proper" utf-8 bytestring that should work as expected in Py3.
+    In Py2 it's just gonna be a string because that's all that's needed."""
+    if is_py3():
+        try:
+            return bytes(a_string, 'utf-8')
+        except TypeError:
+            return a_string
+
+    return a_string
+
+
 def not_a_string(obj):
     """It's probably not a string, in the sense
     that Python2/3 get confused about these things"""
     my_type = str(type(obj))
-    if sys.version_info >= (3, 0):
+    if is_py3():
         is_str = my_type.find('bytes') < 0 and my_type.find('str') < 0
         return is_str
 
@@ -76,7 +105,6 @@ def actually_flatten(iterable):
     This is super ugly. There must be a cleaner py2/3 way
     of handling this."""
     remainder = iter(iterable)
-    is_py3 = sys.version_info >= (3, 0)
     while True:
         first = next(remainder)
         # Python 2/3 compat
@@ -86,12 +114,12 @@ def actually_flatten(iterable):
         except NameError:
             basestring = str  # pylint: disable=W0622
 
-        if is_py3 and is_iter and not_a_string(first):
+        if is_py3() and is_iter and not_a_string(first):
             remainder = IT.chain(first, remainder)
-        elif (not is_py3) and is_iter and not isinstance(first, basestring):
+        elif (not is_py3()) and is_iter and not isinstance(first, basestring):
             remainder = IT.chain(first, remainder)
         else:
-            yield first
+            yield polite_string(first)
 
 
 def flatten(iterable):
@@ -151,7 +179,7 @@ def gnupg_verbose():
 def gnupg_bin():
     """Return the path to the gpg binary"""
     cmd = ["which", "gpg2"]
-    output = stderr_output(cmd).strip()
+    output = stderr_output(cmd).strip().split('\n')[0]
     if not output:
         raise CryptoritoError("gpg2 must be installed")
 
@@ -194,7 +222,7 @@ def key_from_keybase(username, fingerprint=None):
     url = keybase_lookup_url(username)
     resp = requests.get(url)
     if resp.status_code == 200:
-        j_resp = json.loads(resp.content)
+        j_resp = json.loads(polite_string(resp.content))
         if 'them' in j_resp and len(j_resp['them']) == 1:
             kb_obj = j_resp['them'][0]
             if fingerprint:
@@ -215,8 +243,7 @@ def has_gpg_key(fingerprint):
 
     fingerprint = fingerprint.upper()
     cmd = flatten([gnupg_bin(), gnupg_home(), "--list-public-keys"])
-    keys = stderr_output(cmd)
-    lines = keys.split('\n')
+    lines = stderr_output(cmd).split('\n')
     return len([key for key in lines if key.find(fingerprint) > -1]) == 1
 
 
@@ -227,7 +254,7 @@ def fingerprint_from_var(var):
     if vsn[0] >= 2 and vsn[1] < 1:
         cmd.append("--with-fingerprint")
 
-    output = stderr_with_input(cmd, var).split('\n')
+    output = polite_string(stderr_with_input(cmd, var)).split('\n')
     if not output[0].startswith('pub'):
         raise CryptoritoError('probably an invalid gpg key')
 
@@ -272,10 +299,7 @@ def stderr_output(cmd):
         if handle:
             handle.close()
 
-        if sys.version_info >= (3, 0):
-            output = output.decode('utf-8')
-
-        return output
+        return str(polite_string(output))
     except subprocess.CalledProcessError as exception:
         LOGGER.debug("GPG Command %s", ' '.join(exception.cmd))
         LOGGER.debug("GPG Output %s", exception.output)
@@ -292,10 +316,8 @@ def stderr_with_input(cmd, stdin):
                                     stdout=subprocess.PIPE,
                                     stdin=subprocess.PIPE,
                                     stderr=gpg_stderr)
-        if sys.version_info >= (3, 0):
-            stdin = bytes(stdin, 'utf-8')
 
-        output, _err = gpg_proc.communicate(stdin)
+        output, _err = gpg_proc.communicate(polite_bytes(stdin))
 
         if handle:
             handle.close()
@@ -314,18 +336,14 @@ def import_gpg_key(key):
 
     key_fd, key_filename = mkstemp("cryptorito-gpg-import")
     key_handle = os.fdopen(key_fd, 'w')
-    if sys.version_info >= (3, 0):
-        key = key.decode('utf-8')
 
-    key_handle.write(key)
+    key_handle.write(polite_string(key))
     key_handle.close()
     cmd = flatten([gnupg_bin(), gnupg_home(), "--import", key_filename])
     output = stderr_output(cmd)
     msg = 'gpg: Total number processed: 1'
-    if sys.version_info >= (3, 0):
-        output = output.decode('utf-8')
-
-    return len([line for line in output.split('\n') if line == msg]) == 1
+    output_bits = polite_string(output).split('\n')
+    return len([line for line in output_bits if line == msg]) == 1
 
 
 def export_gpg_key(key):
@@ -374,7 +392,7 @@ def encrypt_var(source, keys):
 def gpg_error(exception, message):
     """Handles the output of subprocess errors
     in a way that is compatible with the log level"""
-    LOGGER.debug("GPG Command %s", ' '.join(exception.cmd))
+    LOGGER.debug("GPG Command %s", ' '.join([str(x) for x in exception.cmd]))
     LOGGER.debug("GPG Output %s", exception.output)
     raise CryptoritoError(message)
 
@@ -415,7 +433,7 @@ def is_base64(string):
 
 def portable_b64encode(thing):
     """Wrap b64encode for Python 2 & 3"""
-    if sys.version_info >= (3, 0):
+    if is_py3():
         try:
             some_bits = bytes(thing, 'utf-8')
         except TypeError:
@@ -428,11 +446,4 @@ def portable_b64encode(thing):
 
 def portable_b64decode(thing):
     """Consistent b64decode in Python 2 & 3"""
-    if sys.version_info >= (3, 0):
-        decoded = b64decode(thing)
-        try:
-            return decoded.decode('utf-8')
-        except UnicodeDecodeError:
-            return decoded
-
-    return b64decode(thing)
+    return b64decode(polite_string(thing))
