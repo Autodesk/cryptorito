@@ -3,15 +3,24 @@ from __future__ import print_function
 import collections
 import itertools as IT
 import sys
+import atexit
 import os
 import re
+from shutil import rmtree
 from base64 import b64encode, b64decode
 import logging
 import json
-from tempfile import mkstemp
+from tempfile import mkstemp, mkdtemp
 import subprocess  # nosec
 import requests
-LOGGER = logging.getLogger()
+LOGGER = logging.getLogger(__name__)
+
+if os.environ.get('CRYPTORITO_LOG_LEVEL'):
+    LOG_LEVEL = os.environ['CRYPTORITO_LOG_LEVEL'].lower()
+    if LOG_LEVEL == 'debug':
+        logging.basicConfig(level=logging.DEBUG)
+    elif LOG_LEVEL == 'info':
+        logging.basicConfig(level=logging.INFO)
 
 
 class CryptoritoError(Exception):
@@ -25,22 +34,65 @@ class CryptoritoError(Exception):
             super(CryptoritoError, self).__init__()
 
 
+def clean_tmpdir(path):
+    """Invoked atexit, this removes our tmpdir"""
+    if os.path.exists(path) and \
+       os.path.isdir(path):
+        rmtree(path)
+
+
+def ensure_tmpdir():
+    """Ensures a temporary directory exists"""
+    path = mkdtemp('aomi')
+    atexit.register(clean_tmpdir, path)
+    return path
+
+
 def gpg_version():
     """Returns the GPG version"""
     cmd = flatten([gnupg_bin(), "--version"])
-    val = subprocess.check_output(cmd)  # nosec
-    if sys.version_info >= (3, 0):
-        val = val.decode('utf-8')
+    output = stderr_output(cmd)
+    output = output \
+        .split('\n')[0] \
+        .split(" ")[2] \
+        .split('.')
+    return tuple([int(x) for x in output])
 
-    return val.split("\n")[0] \
-              .split(" ")[2]
+
+def is_py3():
+    """Returns true if this is actually in the future that will
+    be running entierly on Python 3"""
+    return sys.version_info >= (3, 0)
+
+
+def polite_string(a_string):
+    """Returns a "proper" string that should work in both Py3/Py2"""
+    if is_py3() and hasattr(a_string, 'decode'):
+        try:
+            return a_string.decode('utf-8')
+        except UnicodeDecodeError:
+            return a_string
+
+    return a_string
+
+
+def polite_bytes(a_string):
+    """Returns "proper" utf-8 bytestring that should work as expected in Py3.
+    In Py2 it's just gonna be a string because that's all that's needed."""
+    if is_py3():
+        try:
+            return bytes(a_string, 'utf-8')
+        except TypeError:
+            return a_string
+
+    return a_string
 
 
 def not_a_string(obj):
     """It's probably not a string, in the sense
     that Python2/3 get confused about these things"""
     my_type = str(type(obj))
-    if sys.version_info >= (3, 0):
+    if is_py3():
         is_str = my_type.find('bytes') < 0 and my_type.find('str') < 0
         return is_str
 
@@ -53,7 +105,6 @@ def actually_flatten(iterable):
     This is super ugly. There must be a cleaner py2/3 way
     of handling this."""
     remainder = iter(iterable)
-    is_py3 = sys.version_info >= (3, 0)
     while True:
         first = next(remainder)
         # Python 2/3 compat
@@ -63,12 +114,12 @@ def actually_flatten(iterable):
         except NameError:
             basestring = str  # pylint: disable=W0622
 
-        if is_py3 and is_iter and not_a_string(first):
+        if is_py3() and is_iter and not_a_string(first):
             remainder = IT.chain(first, remainder)
-        elif (not is_py3) and is_iter and not isinstance(first, basestring):
+        elif (not is_py3()) and is_iter and not isinstance(first, basestring):
             remainder = IT.chain(first, remainder)
         else:
-            yield first
+            yield polite_string(first)
 
 
 def flatten(iterable):
@@ -77,21 +128,29 @@ def flatten(iterable):
     return [x for x in actually_flatten(iterable)]
 
 
-def passphrase_file():
+def passphrase_file(passphrase=None):
     """Read passphrase from a file. This should only ever be
     used by our built in integration tests. At this time,
     during normal operation, only pinentry is supported for
     entry of passwords."""
     cmd = []
-    if 'CRYPTORITO_PASSPHRASE_FILE' in os.environ:
+    pass_file = None
+    if not passphrase and 'CRYPTORITO_PASSPHRASE_FILE' in os.environ:
         pass_file = os.environ['CRYPTORITO_PASSPHRASE_FILE']
         if not os.path.isfile(pass_file):
             raise CryptoritoError('CRYPTORITO_PASSPHRASE_FILE is invalid')
+    elif passphrase:
+        tmpdir = ensure_tmpdir()
+        pass_file = "%s/p_pass" % tmpdir
+        p_handle = open(pass_file, 'w')
+        p_handle.write(passphrase)
+        p_handle.close()
 
+    if pass_file:
         cmd = cmd + ["--batch", "--passphrase-file", pass_file]
 
         vsn = gpg_version()
-        if int(vsn.split(".")[0]) == 2 and int(vsn.split(".")[1]) >= 1:
+        if vsn[0] >= 2 and vsn[1] >= 1:
             cmd = cmd + ["--pinentry-mode", "loopback"]
 
     return cmd
@@ -120,18 +179,17 @@ def gnupg_verbose():
 def gnupg_bin():
     """Return the path to the gpg binary"""
     cmd = ["which", "gpg2"]
-    try:
-        # We are OK from the perspective of B603
-        output = subprocess.check_output(cmd)  # nosec
-        return output.strip()
-    except subprocess.CalledProcessError:
+    output = stderr_output(cmd).strip().split('\n')[0]
+    if not output:
         raise CryptoritoError("gpg2 must be installed")
+
+    return output
 
 
 def massage_key(key):
     """Massage the keybase return for only what we care about"""
     return {
-        'fingerprint': key['key_fingerprint'],
+        'fingerprint': key['key_fingerprint'].lower(),
         'bundle': key['bundle']
     }
 
@@ -142,17 +200,38 @@ def keybase_lookup_url(username):
         % username
 
 
-def key_from_keybase(username):
+def fingerprint_from_keybase(fingerprint, kb_obj):
+    """Extracts a key matching a specific fingerprint from a
+    Keybase API response"""
+    if 'public_keys' in kb_obj and \
+       'pgp_public_keys' in kb_obj['public_keys']:
+        for key in kb_obj['public_keys']['pgp_public_keys']:
+            keyprint = fingerprint_from_var(key).lower()
+            fingerprint = fingerprint.lower()
+            print("ASDASD  %s %s", [keyprint, fingerprint])
+            if fingerprint == keyprint or \
+               keyprint.startswith(fingerprint):
+                return {
+                    'fingerprint': keyprint,
+                    'bundle': key
+                }
+
+
+def key_from_keybase(username, fingerprint=None):
     """Look up a public key from a username"""
     url = keybase_lookup_url(username)
     resp = requests.get(url)
     if resp.status_code == 200:
-        j_resp = json.loads(resp.content)
-        if 'them' in j_resp and len(j_resp['them']) == 1 \
-           and 'public_keys' in j_resp['them'][0] \
-           and 'pgp_public_keys' in j_resp['them'][0]['public_keys']:
-            key = j_resp['them'][0]['public_keys']['primary']
-            return massage_key(key)
+        j_resp = json.loads(polite_string(resp.content))
+        if 'them' in j_resp and len(j_resp['them']) == 1:
+            kb_obj = j_resp['them'][0]
+            if fingerprint:
+                return fingerprint_from_keybase(fingerprint, kb_obj)
+            else:
+                if 'public_keys' in kb_obj \
+                   and 'pgp_public_keys' in kb_obj['public_keys']:
+                    key = kb_obj['public_keys']['primary']
+                    return massage_key(key)
 
     return None
 
@@ -164,12 +243,37 @@ def has_gpg_key(fingerprint):
 
     fingerprint = fingerprint.upper()
     cmd = flatten([gnupg_bin(), gnupg_home(), "--list-public-keys"])
-    keys = stderr_output(cmd)
-    if sys.version_info >= (3, 0):
-        keys = keys.decode('utf-8')
-
-    lines = keys.split('\n')
+    lines = stderr_output(cmd).split('\n')
     return len([key for key in lines if key.find(fingerprint) > -1]) == 1
+
+
+def fingerprint_from_var(var):
+    """Extract a fingerprint from a GPG public key"""
+    vsn = gpg_version()
+    cmd = flatten([gnupg_bin(), gnupg_home()])
+    if vsn[0] >= 2 and vsn[1] < 1:
+        cmd.append("--with-fingerprint")
+
+    output = polite_string(stderr_with_input(cmd, var)).split('\n')
+    if not output[0].startswith('pub'):
+        raise CryptoritoError('probably an invalid gpg key')
+
+    if vsn[0] >= 2 and vsn[1] < 1:
+        return output[1] \
+            .split('=')[1] \
+            .replace(' ', '')
+
+    return output[1].strip()
+
+
+def fingerprint_from_file(filename):
+    """Extract a fingerprint from a GPG public key file"""
+    cmd = flatten([gnupg_bin(), gnupg_home(), filename])
+    outp = stderr_output(cmd).split('\n')
+    if not outp[0].startswith('pub'):
+        raise CryptoritoError('probably an invalid gpg key')
+
+    return outp[1].strip()
 
 
 def stderr_handle():
@@ -195,11 +299,34 @@ def stderr_output(cmd):
         if handle:
             handle.close()
 
-        return output
+        return str(polite_string(output))
     except subprocess.CalledProcessError as exception:
         LOGGER.debug("GPG Command %s", ' '.join(exception.cmd))
         LOGGER.debug("GPG Output %s", exception.output)
         raise CryptoritoError('GPG Execution')
+
+
+def stderr_with_input(cmd, stdin):
+    """Runs a command, passing something in stdin, and returning
+    whatever came out from stdout"""
+    handle, gpg_stderr = stderr_handle()
+    LOGGER.debug("GPG command %s", ' '.join(cmd))
+    try:
+        gpg_proc = subprocess.Popen(cmd,  # nosec
+                                    stdout=subprocess.PIPE,
+                                    stdin=subprocess.PIPE,
+                                    stderr=gpg_stderr)
+
+        output, _err = gpg_proc.communicate(polite_bytes(stdin))
+
+        if handle:
+            handle.close()
+
+        return output
+    except subprocess.CalledProcessError as exception:
+        return gpg_error(exception, 'GPG variable encryption error')
+    except OSError as exception:
+        raise CryptoritoError("File %s not found" % exception.filename)
 
 
 def import_gpg_key(key):
@@ -209,18 +336,14 @@ def import_gpg_key(key):
 
     key_fd, key_filename = mkstemp("cryptorito-gpg-import")
     key_handle = os.fdopen(key_fd, 'w')
-    if sys.version_info >= (3, 0):
-        key = key.decode('utf-8')
 
-    key_handle.write(key)
+    key_handle.write(polite_string(key))
     key_handle.close()
     cmd = flatten([gnupg_bin(), gnupg_home(), "--import", key_filename])
     output = stderr_output(cmd)
     msg = 'gpg: Total number processed: 1'
-    if sys.version_info >= (3, 0):
-        output = output.decode('utf-8')
-
-    return len([line for line in output.split('\n') if line == msg]) == 1
+    output_bits = polite_string(output).split('\n')
+    return len([line for line in output_bits if line == msg]) == 1
 
 
 def export_gpg_key(key):
@@ -262,66 +385,40 @@ def encrypt_var(source, keys):
     """Attempts to encrypt a variable"""
     cmd = flatten([gnupg_bin(), "--armor", "--encrypt", gnupg_verbose(),
                    recipients_args(keys)])
-    handle, gpg_stderr = stderr_handle()
-    try:
-        gpg_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,  # nosec
-                                    stdin=subprocess.PIPE, stderr=gpg_stderr)
-
-        if sys.version_info >= (3, 0):
-            source = bytes(source, 'utf-8')
-
-        output, _err = gpg_proc.communicate(source)
-        if handle:
-            handle.close()
-
-        gpg_proc.stdin.close()
-        return output
-    except subprocess.CalledProcessError as exception:
-        return gpg_error(exception, 'GPG variable encryption error')
+    output = stderr_with_input(cmd, source)
+    return output
 
 
 def gpg_error(exception, message):
     """Handles the output of subprocess errors
     in a way that is compatible with the log level"""
-    LOGGER.debug("GPG Command %s", ' '.join(exception.cmd))
+    LOGGER.debug("GPG Command %s", ' '.join([str(x) for x in exception.cmd]))
     LOGGER.debug("GPG Output %s", exception.output)
     raise CryptoritoError(message)
 
 
-def decrypt_var(source):
+def decrypt_var(source, passphrase=None):
     """Attempts to decrypt a variable"""
-    cmd = flatten([gnupg_bin(), "--decrypt", gnupg_verbose(),
-                   gnupg_home(), passphrase_file()])
-    handle, gpg_stderr = stderr_handle()
-    try:
-        gpg_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,  # nosec
-                                    stdin=subprocess.PIPE, stderr=gpg_stderr)
-        if sys.version_info >= (3, 0):
-            source = bytes(source, 'utf-8')
+    cmd_bits = [gnupg_bin(), "--decrypt", gnupg_home(), gnupg_verbose()]
+    cmd_bits.append(passphrase_file(passphrase))
 
-        output, _err = gpg_proc.communicate(source)
-        if handle:
-            handle.close()
-
-        gpg_proc.stdin.close()
-        return output
-    except subprocess.CalledProcessError as exception:
-        return gpg_error(exception, 'GPG variable decryption error')
+    cmd = flatten(cmd_bits)
+    return stderr_with_input(cmd, source)
 
 
-def decrypt(source, dest=None):
+def decrypt(source, dest=None, passphrase=None):
     """Attempts to decrypt a file"""
     if not os.path.exists(source):
         raise CryptoritoError("Encrypted file %s not found" % source)
 
-    cmd = [gnupg_bin(), gnupg_verbose(), "--decrypt",
-           gnupg_home(), passphrase_file()]
+    cmd = [gnupg_bin(), gnupg_verbose(), "--decrypt", gnupg_home()]
+    if not passphrase:
+        cmd.append(passphrase_file())
 
     if dest:
         cmd.append(["--output", dest])
 
     cmd.append([source])
-
     stderr_output(flatten(cmd))
     return True
 
@@ -336,7 +433,7 @@ def is_base64(string):
 
 def portable_b64encode(thing):
     """Wrap b64encode for Python 2 & 3"""
-    if sys.version_info >= (3, 0):
+    if is_py3():
         try:
             some_bits = bytes(thing, 'utf-8')
         except TypeError:
@@ -349,11 +446,4 @@ def portable_b64encode(thing):
 
 def portable_b64decode(thing):
     """Consistent b64decode in Python 2 & 3"""
-    if sys.version_info >= (3, 0):
-        decoded = b64decode(thing)
-        try:
-            return decoded.decode('utf-8')
-        except UnicodeDecodeError:
-            return decoded
-
-    return b64decode(thing)
+    return b64decode(polite_string(thing))
