@@ -399,11 +399,10 @@ def gpg_error(exception, message):
 
 def decrypt_var(source, passphrase=None):
     """Attempts to decrypt a variable"""
-    cmd_bits = [gnupg_bin(), "--decrypt", gnupg_home(), gnupg_verbose()]
-    cmd_bits.append(passphrase_file(passphrase))
+    cmd = [gnupg_bin(), "--decrypt", gnupg_home(), gnupg_verbose(),
+           passphrase_file(passphrase)]
 
-    cmd = flatten(cmd_bits)
-    return stderr_with_input(cmd, source)
+    return stderr_with_input(flatten(cmd), source)
 
 
 def decrypt(source, dest=None, passphrase=None):
@@ -411,9 +410,8 @@ def decrypt(source, dest=None, passphrase=None):
     if not os.path.exists(source):
         raise CryptoritoError("Encrypted file %s not found" % source)
 
-    cmd = [gnupg_bin(), gnupg_verbose(), "--decrypt", gnupg_home()]
-    if not passphrase:
-        cmd.append(passphrase_file())
+    cmd = [gnupg_bin(), gnupg_verbose(), "--decrypt", gnupg_home(),
+           passphrase_file(passphrase)]
 
     if dest:
         cmd.append(["--output", dest])
