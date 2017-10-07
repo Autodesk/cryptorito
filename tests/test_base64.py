@@ -1,6 +1,6 @@
 import unittest
 from cryptorito import is_base64, portable_b64encode, \
-    portable_b64decode
+    portable_b64decode, polite_string
 
 class StringTests(unittest.TestCase):
     ghost_emoji = portable_b64decode('8J+Ruwo=')
@@ -13,3 +13,7 @@ class StringTests(unittest.TestCase):
         self.assertFalse(is_base64("foo"))
         self.assertFalse(is_base64("2454"))
         self.assertFalse(is_base64("1234"))
+
+    def test_happy_path(self):
+        print("AAAA %s" % portable_b64decode(portable_b64encode("foo")))
+        assert polite_string(portable_b64decode(portable_b64encode("foo"))) == "foo"
