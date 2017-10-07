@@ -1,5 +1,7 @@
 ifndef TRAVIS
-	CIENV = $(shell pwd)/.ci-env/bin/
+ifndef VIRTUAL_ENV
+CIENV = $(shell pwd)/.ci-env/bin/
+endif
 endif
 
 test: testenv version

@@ -437,9 +437,9 @@ def portable_b64encode(thing):
         except TypeError:
             some_bits = thing
 
-        return b64encode(some_bits).decode('utf-8')
+        return polite_string(b64encode(some_bits).decode('utf-8'))
 
-    return b64encode(thing)
+    return polite_string(b64encode(thing))
 
 
 def portable_b64decode(thing):
