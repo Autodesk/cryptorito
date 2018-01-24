@@ -4,7 +4,7 @@ import cryptorito
 import requests_mock
 
 TEST_USER="otakup0pe"
-TEST_FINGERPRINT="24dc892a65208cf24b173740c455af0097fc312e"
+TEST_FINGERPRINT="8ee6565c22de77b5e59d63cb9bb113294217021b"
 
 def load_fixture(fix):
     testdir = os.path.dirname(__file__)

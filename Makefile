@@ -6,7 +6,7 @@ endif
 
 test: testenv version
 	$(CIENV)coverage erase
-	$(CIENV)pep8 cryptorito
+	$(CIENV)pycodestyle cryptorito
 	$(CIENV)pylint --rcfile=/dev/null cryptorito
 	CRYPTORITO_LOG_LEVEL=debug COVERAGE_FILE=.coverage \
 		$(CIENV)nose2 --verbose \

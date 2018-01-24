@@ -10,7 +10,7 @@ setup() {
 @test "keybase minimal" {
     run_cryptorito 0 import_keybase "otakup0pe"
     run_cryptorito 2 import_keybase "otakup0pe"
-    run_cryptorito 0 import_keybase "otakup0pe:077342F6"
+    run_cryptorito 0 import_keybase "otakup0pe:131DBEE2"
     VAR="beep-boop-${RANDOM}"
 }
 

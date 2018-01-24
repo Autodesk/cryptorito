@@ -176,14 +176,26 @@ def gnupg_verbose():
     return ["-q"]
 
 
-def gnupg_bin():
-    """Return the path to the gpg binary"""
-    cmd = ["which", "gpg2"]
-    output = stderr_output(cmd).strip().split('\n')[0]
-    if not output:
-        raise CryptoritoError("gpg2 must be installed")
+def which_bin(cmd):
+    """Returns the path to a thing, or None"""
+    cmd = ["which", cmd]
+    try:
+        return stderr_output(cmd).strip().split('\n')[0]
+    except CryptoritoError:
+        return None
 
-    return output
+
+def gnupg_bin():
+    """Return the path to the gpg binary.
+    Note that on some systems this is gpg, and others gpg2. We
+    try to support both."""
+    gpg_output = which_bin("gpg2")
+    if not gpg_output:
+        gpg_output = which_bin("gpg")
+        if not gpg_output:
+            raise CryptoritoError("gpg or gpg2 must be installed")
+
+    return gpg_output
 
 
 def massage_key(key):
@@ -208,13 +220,15 @@ def fingerprint_from_keybase(fingerprint, kb_obj):
         for key in kb_obj['public_keys']['pgp_public_keys']:
             keyprint = fingerprint_from_var(key).lower()
             fingerprint = fingerprint.lower()
-            print("ASDASD  %s %s", [keyprint, fingerprint])
             if fingerprint == keyprint or \
-               keyprint.startswith(fingerprint):
+               keyprint.startswith(fingerprint) or \
+               keyprint.endswith(fingerprint):
                 return {
                     'fingerprint': keyprint,
                     'bundle': key
                 }
+
+    return None
 
 
 def key_from_keybase(username, fingerprint=None):
@@ -349,7 +363,7 @@ def import_gpg_key(key):
 def export_gpg_key(key):
     """Exports a GPG key and returns it"""
     cmd = flatten([gnupg_bin(), gnupg_verbose(), gnupg_home(),
-                   "--export", key, "--armor"])
+                   "--export", key])
     handle, gpg_stderr = stderr_handle()
     try:
         gpg_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,  # nosec
@@ -358,7 +372,7 @@ def export_gpg_key(key):
         if handle:
             handle.close()
 
-        return output
+        return portable_b64encode(output)
     except subprocess.CalledProcessError as exception:
         LOGGER.debug("GPG Command %s", ' '.join(exception.cmd))
         LOGGER.debug("GPG Output %s", exception.output)

@@ -7,6 +7,13 @@ export ROOTDIR
 BATSGIT="${ROOTDIR}/.bats-git"
 BATSBIN="${ROOTDIR}/.bats"
 
+GPG=gpg2
+if ! which "$GPG" ; then
+    GPG=gpg
+    if ! which "$GPG" ; then
+        echo "either gpg or gpg2 must be installed"
+    fi
+fi
 if [ -z "$TRAVIS" ] && [ -z "$VIRTUAL_ENV" ] ; then
     . "${ROOTDIR}/.ci-env/bin/activate"
 fi
@@ -19,5 +26,5 @@ if [ ! -d "$BATSBIN" ] ; then
     cd "$BATSGIT"
     ./install.sh "$BATSBIN"
 fi
-gpg2 --version
+"$GPG" --version
 "${ROOTDIR}/.bats/bin/bats" "${ROOTDIR}/tests/integration/a_smoke.bats"
