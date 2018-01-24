@@ -106,7 +106,7 @@ def actually_flatten(iterable):
     of handling this."""
     remainder = iter(iterable)
     while True:
-        first = next(remainder)
+        first = next(remainder)  # pylint: disable=R1708
         # Python 2/3 compat
         is_iter = isinstance(first, collections.Iterable)
         try:
