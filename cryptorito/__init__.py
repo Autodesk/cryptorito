@@ -189,13 +189,12 @@ def gnupg_bin():
     """Return the path to the gpg binary.
     Note that on some systems this is gpg, and others gpg2. We
     try to support both."""
-    gpg_output = which_bin("gpg2")
-    if not gpg_output:
-        gpg_output = which_bin("gpg")
-        if not gpg_output:
-            raise CryptoritoError("gpg or gpg2 must be installed")
+    for a_bin in ["gpg2", "gpg"]:
+        gpg_output = which_bin(a_bin)
+        if gpg_output:
+            return gpg_output
 
-    return gpg_output
+    raise CryptoritoError("gpg or gpg2 must be installed")
 
 
 def massage_key(key):
